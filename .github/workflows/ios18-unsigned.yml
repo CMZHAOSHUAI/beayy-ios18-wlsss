@@ -1,0 +1,111 @@
+# 把 Beayy iPhone + 内嵌手表编成未签名 IPA（最低系统 iOS 18 / watchOS 11）。
+# 只手动触发。不要用作者的 DEVELOPMENT_TEAM 签名；本 job 全程 CODE_SIGNING_ALLOWED=NO。
+#
+# 用法：把本分支推到你自己的 GitHub 仓库（不要推到 hengfengliya/beayy），
+# Actions →「ios18-unsigned」→ Run workflow，再下载产物 Beayy-0.2.65-ios18-unsigned.ipa。
+#
+# Runner / Xcode：macos-15（arm64）+ Xcode 26.3。
+# 源码原先按 Xcode 26 编写；26.3 是 macos-15 上能跑的最新 Xcode 26
+# （26.4 起需要 macOS 26）。用它编、把 deployment 设为 iOS 18 / watchOS 11。
+# 若 26.3 拒绝该部署版本，同一镜像上可改选 /Applications/Xcode_16.4.app（默认，iOS 18.5 SDK）。
+name: ios18-unsigned
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.3
+        run: |
+          set -euo pipefail
+          XCODE=/Applications/Xcode_26.3.app
+          if [ ! -d "$XCODE" ]; then
+            echo "Xcode_26.3.app not found. Installed Xcodes:"
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build unsigned iPhone app with embedded Watch
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project BeayyRecorder.xcodeproj \
+            -scheme BeayyPhone \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ../DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            DEVELOPMENT_TEAM= \
+            build
+
+      - name: Package unsigned IPA and verify Watch is embedded
+        run: |
+          set -euo pipefail
+          APP=DerivedData/Build/Products/Release-iphoneos/Beayy.app
+          if [ ! -d "$APP" ]; then
+            echo "Beayy.app not found. Build products:"
+            find DerivedData/Build/Products -maxdepth 3 -type d -print || true
+            exit 1
+          fi
+          echo "=== App bundle ==="
+          ls -la "$APP"
+          echo "=== Embedded .app paths (expect Watch/*.app) ==="
+          find "$APP" -name '*.app' -print
+          WATCH=$(find "$APP/Watch" -maxdepth 1 -name '*.app' -print -quit || true)
+          if [ -z "$WATCH" ]; then
+            echo "ERROR: no Watch/*.app inside Beayy.app; unsigned IPA would miss the watch app."
+            find "$APP" -iname '*watch*' -print || true
+            exit 1
+          fi
+          echo "Embedded watch app: $WATCH"
+          plutil -p "$APP/Info.plist" | sed -n '1,80p' || true
+          echo "MinimumOSVersion (iPhone):"
+          plutil -extract MinimumOSVersion raw "$APP/Info.plist" || true
+          echo "MinimumOSVersion (Watch):"
+          plutil -extract MinimumOSVersion raw "$WATCH/Info.plist" || true
+
+          rm -rf dist
+          mkdir -p dist/Payload
+          ditto "$APP" dist/Payload/Beayy.app
+          (
+            cd dist
+            zip -r -y "../Beayy-0.2.65-ios18-unsigned.ipa" Payload
+          )
+          ls -lh Beayy-0.2.65-ios18-unsigned.ipa
+          {
+            echo "ipa=Beayy-0.2.65-ios18-unsigned.ipa"
+            echo "iphone_min=$(plutil -extract MinimumOSVersion raw "$APP/Info.plist" 2>/dev/null || echo unknown)"
+            echo "watch_min=$(plutil -extract MinimumOSVersion raw "$WATCH/Info.plist" 2>/dev/null || echo unknown)"
+            echo "watch_app=$WATCH"
+          } | tee ipa-contents.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Beayy-0.2.65-ios18-unsigned
+          path: |
+            Beayy-0.2.65-ios18-unsigned.ipa
+            ipa-contents.txt
+          if-no-files-found: error

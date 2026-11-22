@@ -1,5 +1,5 @@
 import SwiftUI
-#if canImport(UIKit)
+#if os(iOS)
 import UIKit
 #endif
 
@@ -37,15 +37,22 @@ enum Theme {
 
     private static func dyn(_ light: UInt32, _ dark: UInt32, _ la: Double = 1, _ da: Double = 1) -> Color {
         #if os(iOS)
-        return Color(UIColor { $0.userInterfaceStyle == .dark ? rgb(dark, da) : rgb(light, la) })
+        return Color(UIColor { trait in
+            let v = trait.userInterfaceStyle == .dark ? dark : light
+            let a = trait.userInterfaceStyle == .dark ? da : la
+            return UIColor(red: CGFloat((v >> 16) & 0xff) / 255,
+                           green: CGFloat((v >> 8) & 0xff) / 255,
+                           blue: CGFloat(v & 0xff) / 255,
+                           alpha: CGFloat(a))
+        })
         #else
-        return Color(rgb(dark, da))
+        // 手表只有深色：纯 SwiftUI Color，不依赖 UIKit / UIColor
+        return Color(.sRGB,
+                     red: Double((dark >> 16) & 0xff) / 255,
+                     green: Double((dark >> 8) & 0xff) / 255,
+                     blue: Double(dark & 0xff) / 255,
+                     opacity: da)
         #endif
-    }
-
-    private static func rgb(_ v: UInt32, _ a: Double) -> UIColor {
-        UIColor(red: CGFloat((v >> 16) & 0xff) / 255, green: CGFloat((v >> 8) & 0xff) / 255,
-                blue: CGFloat(v & 0xff) / 255, alpha: CGFloat(a))
     }
 }
 

@@ -6,8 +6,8 @@ options:
   # 开发语言中文；权限说明另有英文（Phone/、Watch/ 下的 *.lproj/InfoPlist.strings，tools/生成InfoPlist译文.py 生成）
   developmentLanguage: zh-Hans
   deploymentTarget:
-    iOS: "26.0"
-    watchOS: "26.0"
+    iOS: "18.0"
+    watchOS: "11.0"
 packages:
   Sodium:
     url: https://github.com/jedisct1/swift-sodium
@@ -56,7 +56,7 @@ targets:
         script: |
           export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:$PATH"
           if [ "$PLATFORM_NAME" = iphonesimulator ]; then T=aarch64-apple-ios-sim; else T=aarch64-apple-ios; fi
-          cd "$SRCROOT/.." && IPHONEOS_DEPLOYMENT_TARGET=26.0 cargo build -p beayy-mobile --release --target "$T"
+          cd "$SRCROOT/.." && IPHONEOS_DEPLOYMENT_TARGET=18.0 cargo build -p beayy-mobile --release --target "$T"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fengli.beayy.ios
